@@ -83,5 +83,8 @@ def get_sigloxx(slug):
         return "Error", 500
 
 if __name__ == "__main__":
+    # Render asigna un puerto en la variable de entorno PORT
+    # Si no existe, usa el 10000 por defecto
     port = int(os.environ.get("PORT", 10000))
+    # Es VITAL usar host='0.0.0.0' para que sea visible fuera del contenedor
     app.run(host='0.0.0.0', port=port)
