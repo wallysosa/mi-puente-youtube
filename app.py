@@ -8,21 +8,19 @@ import re
 app = Flask(__name__)
 
 # CONFIGURACIÓN
-# IMPORTANTE: Cambia esta URL por la tuya actual de Render
-BASE_URL = "https://cine-unificado-m3u.onrender.com" 
 WEB_SXX_HOME = "https://2000peliculassigloxx.com"
 WEB_SXX_VIDEO = "https://videos.2000peliculassigloxx.com"
 
 @app.route('/')
 def home():
-    return "<h1>SERVIDOR UNIFICADO ACTIVO</h1><p>Lista M3U: /cine.m3u</p>", 200
+    return "<h1>SERVIDOR UNIFICADO ACTIVO</h1><p>Tu lista está en: <b>/lista.m3u</b></p>", 200
 
-@app.route('/cine.m3u')
+@app.route('/lista.m3u')
 def generar_lista():
     host = request.host_url.rstrip('/')
     m3u = "#EXTM3U\r\n"
 
-    # --- SECCIÓN 1: PLUTO TV (MANUAL) ---
+    # --- PLUTO TV ---
     peliculas_pluto = [
         ("El Redentor", "5efca13459900d0014d5857e", "Pluto Acción"),
         ("Inmortales", "697b59d471e7de966ec5cbe4", "Pluto Fantasía"),
@@ -35,32 +33,27 @@ def generar_lista():
     ]
 
     for nombre, vid, cat in peliculas_pluto:
-        # Imagen formato póster (se ve mejor en PotPlayer)
         img = f"https://images.pluto.tv/movies/{vid}/poster.jpg?w=400"
         m3u += f'#EXTINF:-1 tvg-logo="{img}" group-title="{cat}", {nombre}\r\n'
         m3u += f'{host}/pluto/{vid}\r\n'
 
-    # --- SECCIÓN 2: SIGLO XX (AUTOMÁTICO) ---
+    # --- SIGLO XX ---
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         r = requests.get(WEB_SXX_HOME, headers=headers, timeout=10)
         soup = BeautifulSoup(r.text, 'html.parser')
-        
         for peli in soup.find_all('article'):
             try:
                 titulo = peli.find('h2').text.strip()
                 link = peli.find('a')['href']
                 slug = link.rstrip('/').split('/')[-1]
                 foto = peli.find('img')['src']
-                
                 m3u += f'#EXTINF:-1 tvg-logo="{foto}" group-title="Cine Siglo XX", {titulo}\r\n'
                 m3u += f'{host}/sigloxx/{slug}\r\n'
             except: continue
     except: pass
 
     return Response(m3u, mimetype='application/x-mpegurl')
-
-# --- MANEJADORES DE VIDEO ---
 
 @app.route('/pluto/<video_id>')
 def get_pluto(video_id):
@@ -73,10 +66,8 @@ def get_sigloxx(slug):
     headers = {"User-Agent": "Mozilla/5.0", "Referer": f"{WEB_SXX_VIDEO}/{slug}/"}
     try:
         r = requests.get(f"{WEB_SXX_VIDEO}/{slug}/embed/", headers=headers, timeout=10)
-        # Buscamos el link del video MP4 o M3U8 escondido
         video_links = re.findall(r'(https?://[^\s"\']+\.(?:mp4|m3u8|m4v)[^\s"\']*)', r.text)
-        if video_links:
-            return redirect(video_links[0], code=302)
+        if video_links: return redirect(video_links[0], code=302)
     except: pass
     return "No encontrado", 404
 
