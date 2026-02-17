@@ -6,75 +6,49 @@ import os
 app = Flask(__name__)
 
 # Configuración de URLs
-BASE_URL = "https://2000peliculassigloxx.com"
-VIDEO_SERVER = "https://videos.2000peliculassigloxx.com"
 STREAM_SERVER = "https://streaming.2000peliculassigloxx.com/yandex/yadisk.html?v="
 
 @app.route('/')
 def index():
-    return "Servidor Siglo XX Funcionando. Lista en /lista.m3u", 200
+    return "Servidor Siglo XX Activo. Prueba con /video/nFSeFHQcutFp3g", 200
 
 @app.route('/lista.m3u')
 def m3u_gen():
     host = request.host_url.rstrip('/')
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
-    
     m3u = "#EXTM3U\n"
-    
-    try:
-        # 1. Obtenemos la web principal
-        r = requests.get(BASE_URL, headers=headers, timeout=10)
-        # 2. Buscamos solo los bloques de artículos para evitar el código JS
-        # Buscamos: href="URL" ... title="TITULO"
-        movies = re.findall(r'<article.*?\s+href="https://2000peliculassigloxx\.com/([^"/]+)/".*?title="(.*?)".*?>', r.text, re.DOTALL)
-        
-        added = set()
-        for slug, title in movies:
-            if slug in added or "PolÃ­tica" in title or "Contacto" in title:
-                continue
-            
-            # Limpiamos el título de caracteres extraños
-            clean_title = title.replace("Ver online", "").replace("descargar", "").strip()
-            # Imagen por defecto (puedes ajustarla)
-            img = f"{BASE_URL}/wp-content/uploads/{slug}.jpg"
-            
-            m3u += f'#EXTINF:-1 tvg-logo="{img}" group-title="Cine Siglo XX", {clean_title}\n'
-            m3u += f'{host}/video/{slug}\n'
-            added.add(slug)
-            
-    except Exception as e:
-        m3u += f"# Error: {str(e)}\n"
-        
+    # Película de prueba con el ID que pasaste
+    m3u += '#EXTINF:-1 group-title="Cine Siglo XX", Una noche en Casablanca\n'
+    m3u += f'{host}/video/nFSeFHQcutFp3g\n'
     return Response(m3u, mimetype='application/x-mpegurl')
 
-@app.route('/video/<slug>')
-def get_stream(slug):
+@app.route('/video/<v_id>')
+def get_stream(v_id):
+    # 1. Construimos la URL de streaming que pasaste
+    target_url = f"{STREAM_SERVER}{v_id}"
+    
     headers = {
-        'User-Agent': 'Mozilla/5.0',
-        'Referer': f"{VIDEO_SERVER}/{slug}/"
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://videos.2000peliculassigloxx.com/'
     }
     
     try:
-        # Entramos a la página de video para buscar el ID de Yandex
-        r = requests.get(f"{VIDEO_SERVER}/{slug}/embed/", headers=headers, timeout=10)
+        # 2. Entramos a la página de streaming para buscar el MP4 real
+        r = requests.get(target_url, headers=headers, timeout=10)
         
-        # Buscamos el ID que está después de yadisk.html?v=
-        id_match = re.search(r'yadisk\.html\?v=([a-zA-Z0-9_-]+)', r.text)
+        # 3. Buscamos el enlace al archivo .mp4 (Yandex suele ponerlo en una variable o etiqueta source)
+        # Buscamos patrones como: "file":"http..." o src="http..."
+        video_match = re.search(r'(https?://[^\s"\']+\.(?:mp4|m3u8)[^\s"\']*)', r.text)
         
-        if id_match:
-            video_id = id_match.group(1)
-            # Redirigimos al link directo que descubrimos que funciona
-            return redirect(f"{STREAM_SERVER}{video_id}", code=302)
+        if video_match:
+            video_url = video_match.group(1).replace('\\/', '/')
+            # 4. Redirigimos a PotPlayer al archivo de video real
+            return redirect(video_url, code=302)
         
-        # Si no hay Yandex, intentamos buscar cualquier MP4 directo
-        mp4_match = re.search(r'source src="(.*?\.mp4)"', r.text)
-        if mp4_match:
-            return redirect(mp4_match.group(1), code=302)
+        # Si no lo encontramos, intentamos devolver la página de streaming (a veces PotPlayer la abre)
+        return redirect(target_url, code=302)
             
-    except:
-        pass
-        
-    return "Video no disponible", 404
+    except Exception as e:
+        return f"Error: {str(e)}", 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
