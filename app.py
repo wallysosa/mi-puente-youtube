@@ -20,64 +20,62 @@ def generar_lista():
     m3u = "#EXTM3U\r\n"
     
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
     }
 
     try:
-        # 1. Obtenemos la página principal
+        # Intentamos obtener la web
         r = requests.get(WEB_SXX_HOME, headers=headers, timeout=15)
         soup = BeautifulSoup(r.text, 'html.parser')
         
-        # 2. Buscamos todas las películas (artículos)
-        articulos = soup.find_all('article')
+        # BUSCADOR DINÁMICO: Buscamos todos los enlaces que contengan el dominio o sean de películas
+        enlaces = soup.find_all('a', href=True)
         
-        for peli in articulos:
-            try:
-                # Extraer título
-                titulo_tag = peli.find('h2')
-                if not titulo_tag: continue
-                titulo = titulo_tag.text.strip()
+        encontradas = 0
+        for link in enlaces:
+            url_peli = link['href']
+            # Filtramos links que no son de películas
+            if "pelicula" in url_peli or "2000peliculassigloxx.com/" in url_peli:
+                # Intentamos sacar el título del texto del link o del atributo title
+                titulo = link.get_text().strip()
+                if not titulo or len(titulo) < 3:
+                    titulo = url_peli.rstrip('/').split('/')[-1].replace('-', ' ').title()
                 
-                # Extraer enlace y slug
-                link_tag = peli.find('a')
-                if not link_tag: continue
-                link = link_tag['href']
-                slug = link.rstrip('/').split('/')[-1]
+                # Evitamos duplicados y links vacíos como 'Home'
+                if titulo.lower() in ['home', 'inicio', 'películas', 'contacto']: continue
                 
-                # Extraer imagen
-                img_tag = peli.find('img')
-                foto = img_tag['src'] if img_tag else ""
+                slug = url_peli.rstrip('/').split('/')[-1]
                 
-                # Añadir a la lista
+                # Buscamos imagen cercana
+                img_tag = link.find('img')
+                foto = img_tag['src'] if img_tag else "https://via.placeholder.com/400x600.png?text=Sin+Poster"
+                
                 m3u += f'#EXTINF:-1 tvg-logo="{foto}" group-title="Cine Siglo XX", {titulo}\r\n'
                 m3u += f'{host}/video/{slug}\r\n'
-            except:
-                continue
+                encontradas += 1
+        
+        if encontradas == 0:
+            m3u += "# ERROR: La web no entrego peliculas. Revisa la URL o el bloqueo.\n"
+
     except Exception as e:
-        m3u += f"# ERROR AL CONECTAR CON SIGLO XX: {str(e)}\n"
+        m3u += f"# ERROR DE CONEXION: {str(e)}\n"
 
     return Response(m3u, mimetype='application/x-mpegurl')
 
 @app.route('/video/<slug>')
 def get_video(slug):
-    # Esta es la parte que "salta" el reproductor de la web para darte el video directo
     target_url = f"{WEB_SXX_VIDEO}/{slug}/embed/"
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Referer": f"{WEB_SXX_VIDEO}/{slug}/"
-    }
-    
+    headers = {"User-Agent": "Mozilla/5.0", "Referer": f"{WEB_SXX_VIDEO}/{slug}/"}
     try:
         r = requests.get(target_url, headers=headers, timeout=10)
-        # Buscamos archivos .mp4 o .m3u8 en el código de la página
+        # Buscamos enlaces de video MP4 o M3U8
         video_links = re.findall(r'(https?://[^\s"\']+\.(?:mp4|m3u8|m4v)[^\s"\']*)', r.text)
-        
         if video_links:
-            # Redirigimos al primer link de video encontrado
             return redirect(video_links[0], code=302)
-        return "Video no encontrado en el origen", 404
+        return "Video no encontrado", 404
     except:
-        return "Error de conexión", 500
+        return "Error", 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
