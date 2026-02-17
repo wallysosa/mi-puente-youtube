@@ -5,53 +5,69 @@ import os
 
 app = Flask(__name__)
 
+# CONFIGURACIÓN
+WEB_SXX_HOME = "https://2000peliculassigloxx.com"
+WEB_SXX_VIDEO = "https://videos.2000peliculassigloxx.com"
+
 @app.route('/')
 def home():
-    return "<h1>SERVIDOR SIGLO XX - YANDEX MODE</h1><p>Lista: <b>/lista.m3u</b></p>", 200
+    return "<h1>SERVIDOR SIGLO XX - MODO STREAMING</h1><p>Lista M3U: <b>/lista.m3u</b></p>", 200
 
 @app.route('/lista.m3u')
 def generar_lista():
     host = request.host_url.rstrip('/')
     m3u = "#EXTM3U\r\n"
     
-    # Película: Una noche en Casablanca
-    img = "https://2000peliculassigloxx.com/wp-content/uploads/una-noche-en-casablanca.jpg"
-    
-    m3u += f'#EXTINF:-1 tvg-logo="{img}" group-title="Cine Siglo XX", Una noche en Casablanca\r\n'
-    m3u += f'{host}/video/una-noche-en-casablanca\r\n'
-    
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+
+    try:
+        # 1. Escaneamos la web principal para sacar las películas
+        r = requests.get(WEB_SXX_HOME, headers=headers, timeout=15)
+        # Buscamos los slugs de las películas y sus nombres
+        # Este regex captura el enlace y el título de los artículos
+        patron = re.findall(r'href="https://2000peliculassigloxx\.com/([^"/]+)/".*?>(.*?)</a>', r.text, re.DOTALL)
+        
+        encontrados = set()
+        for slug, titulo_sucia in patron:
+            titulo = re.sub('<[^<]+?>', '', titulo_sucia).strip() # Limpiamos HTML del título
+            
+            if slug in ['decadas', 'biografias', 'sagas', 'contacto', 'aplicacion'] or len(titulo) < 3:
+                continue
+            
+            if slug not in encontrados:
+                foto = f"https://2000peliculassigloxx.com/wp-content/uploads/{slug}.jpg"
+                m3u += f'#EXTINF:-1 tvg-logo="{foto}" group-title="Cine Siglo XX", {titulo}\r\n'
+                m3u += f'{host}/video/{slug}\r\n'
+                encontrados.add(slug)
+    except:
+        m3u += "# ERROR AL CARGAR LISTA\n"
+
     return Response(m3u, mimetype='application/x-mpegurl')
 
 @app.route('/video/<slug>')
 def get_video(slug):
-    # Intentamos entrar al embed para buscar el link de Yandex
-    embed_url = f"https://videos.2000peliculassigloxx.com/{slug}/embed/"
+    # Intentamos encontrar el código de Yandex (ej: nFSeFHQcutFp3g)
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': f'https://videos.2000peliculassigloxx.com/{slug}/'
     }
-
+    
     try:
-        # 1. Obtenemos el código del embed
-        r = requests.get(embed_url, headers=headers, timeout=10)
+        # Entramos al embed oficial de la película
+        r = requests.get(f"https://videos.2000peliculassigloxx.com/{slug}/embed/", headers=headers, timeout=10)
         
-        # 2. Buscamos específicamente links de Yandex Storage o archivos MP4
-        # Esta expresión busca el link largo que me pasaste
-        match = re.search(r'(https?://[^\s"\']+\.yandex\.net/[^\s"\']+)', r.text)
+        # Buscamos el ID del video que va después de ?v=
+        id_video = re.search(r'yadisk\.html\?v=([a-zA-Z0-9_-]+)', r.text)
         
-        if match:
-            # Limpiamos el link por si tiene comillas
-            link_directo = match.group(1).replace('&amp;', '&')
-            return redirect(link_directo, code=302)
-        
-        # Si no lo encuentra, intentamos buscar cualquier MP4
-        match_mp4 = re.search(r'(https?://[^\s"\']+\.mp4[^\s"\']*)', r.text)
-        if match_mp4:
-            return redirect(match_mp4.group(1), code=302)
-
-        return "No se pudo extraer el link de Yandex. Puede que haya expirado.", 404
+        if id_video:
+            # Construimos el link de streaming directo que me pasaste
+            direct_stream = f"https://streaming.2000peliculassigloxx.com/yandex/yadisk.html?v={id_video.group(1)}"
+            return redirect(direct_stream, code=302)
+            
+        # Si no lo encuentra por ID, intentamos redirigir al embed normal
+        return redirect(f"https://videos.2000peliculassigloxx.com/{slug}/embed/", code=302)
     except:
-        return "Error de conexión", 500
+        return "Error", 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
