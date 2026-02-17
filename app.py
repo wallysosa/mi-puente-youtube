@@ -19,61 +19,71 @@ def generar_lista():
     host = request.host_url.rstrip('/')
     m3u = "#EXTM3U\r\n"
     
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-    }
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
     try:
-        # Intentamos obtener la web
         r = requests.get(WEB_SXX_HOME, headers=headers, timeout=15)
         soup = BeautifulSoup(r.text, 'html.parser')
         
-        # BUSCADOR DINÁMICO: Buscamos todos los enlaces que contengan el dominio o sean de películas
-        enlaces = soup.find_all('a', href=True)
+        # Filtramos solo los artículos de películas reales
+        articulos = soup.find_all('article')
         
-        encontradas = 0
-        for link in enlaces:
-            url_peli = link['href']
-            # Filtramos links que no son de películas
-            if "pelicula" in url_peli or "2000peliculassigloxx.com/" in url_peli:
-                # Intentamos sacar el título del texto del link o del atributo title
-                titulo = link.get_text().strip()
-                if not titulo or len(titulo) < 3:
-                    titulo = url_peli.rstrip('/').split('/')[-1].replace('-', ' ').title()
+        for peli in articulos:
+            try:
+                # 1. Extraer Título (solo del H2 para evitar menús)
+                titulo_tag = peli.find('h2')
+                if not titulo_tag: continue
+                titulo = titulo_tag.text.strip()
                 
-                # Evitamos duplicados y links vacíos como 'Home'
-                if titulo.lower() in ['home', 'inicio', 'películas', 'contacto']: continue
+                # 2. Extraer Link y Slug
+                a_tag = peli.find('a', href=True)
+                link = a_tag['href']
+                slug = link.rstrip('/').split('/')[-1]
                 
-                slug = url_peli.rstrip('/').split('/')[-1]
+                # Ignorar links que no son películas individuales
+                if slug in ['decadas', 'biografias', 'sagas', 'contacto', 'aplicacion']: continue
                 
-                # Buscamos imagen cercana
-                img_tag = link.find('img')
-                foto = img_tag['src'] if img_tag else "https://via.placeholder.com/400x600.png?text=Sin+Poster"
+                # 3. Extraer Imagen Real
+                img_tag = peli.find('img')
+                if img_tag:
+                    # Buscamos la imagen real, a veces está en 'data-src' o 'src'
+                    foto = img_tag.get('data-src') or img_tag.get('src')
+                else:
+                    foto = "https://via.placeholder.com/400x600.png?text=Cine+Clasico"
                 
                 m3u += f'#EXTINF:-1 tvg-logo="{foto}" group-title="Cine Siglo XX", {titulo}\r\n'
                 m3u += f'{host}/video/{slug}\r\n'
-                encontradas += 1
-        
-        if encontradas == 0:
-            m3u += "# ERROR: La web no entrego peliculas. Revisa la URL o el bloqueo.\n"
-
-    except Exception as e:
-        m3u += f"# ERROR DE CONEXION: {str(e)}\n"
+            except:
+                continue
+    except:
+        m3u += "# ERROR DE CONEXION\n"
 
     return Response(m3u, mimetype='application/x-mpegurl')
 
 @app.route('/video/<slug>')
 def get_video(slug):
-    target_url = f"{WEB_SXX_VIDEO}/{slug}/embed/"
-    headers = {"User-Agent": "Mozilla/5.0", "Referer": f"{WEB_SXX_VIDEO}/{slug}/"}
+    # Intentamos encontrar el video real dentro de la página de video
+    video_page = f"{WEB_SXX_VIDEO}/{slug}/"
+    embed_url = f"{WEB_SXX_VIDEO}/{slug}/embed/"
+    headers = {"User-Agent": "Mozilla/5.0", "Referer": video_page}
+    
     try:
-        r = requests.get(target_url, headers=headers, timeout=10)
-        # Buscamos enlaces de video MP4 o M3U8
-        video_links = re.findall(r'(https?://[^\s"\']+\.(?:mp4|m3u8|m4v)[^\s"\']*)', r.text)
+        # Primero probamos en la página de embed
+        r = requests.get(embed_url, headers=headers, timeout=10)
+        # Buscamos links que terminen en .mp4, .m3u8 o que contengan 'stream'
+        video_links = re.findall(r'(https?://[^\s"\']+\.(?:mp4|m3u8|m4v|ts)[^\s"\']*)', r.text)
+        
+        if not video_links:
+            # Si no hay suerte, probamos en la página normal
+            r = requests.get(video_page, headers=headers, timeout=10)
+            video_links = re.findall(r'(https?://[^\s"\']+\.(?:mp4|m3u8|m4v|ts)[^\s"\']*)', r.text)
+
         if video_links:
-            return redirect(video_links[0], code=302)
-        return "Video no encontrado", 404
+            # Filtramos para no redirigir a archivos CSS o JS por error
+            final_link = [l for l in video_links if ".js" not in l and ".css" not in l][0]
+            return redirect(final_link, code=302)
+            
+        return "Video no encontrado. Puede que sea un servidor externo no soportado.", 404
     except:
         return "Error", 500
 
