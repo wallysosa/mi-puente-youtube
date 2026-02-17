@@ -5,69 +5,76 @@ import os
 
 app = Flask(__name__)
 
-# CONFIGURACIÓN
-WEB_SXX_HOME = "https://2000peliculassigloxx.com"
-WEB_SXX_VIDEO = "https://videos.2000peliculassigloxx.com"
+# Configuración de URLs
+BASE_URL = "https://2000peliculassigloxx.com"
+VIDEO_SERVER = "https://videos.2000peliculassigloxx.com"
+STREAM_SERVER = "https://streaming.2000peliculassigloxx.com/yandex/yadisk.html?v="
 
 @app.route('/')
-def home():
-    return "<h1>SERVIDOR SIGLO XX - MODO STREAMING</h1><p>Lista M3U: <b>/lista.m3u</b></p>", 200
+def index():
+    return "Servidor Siglo XX Funcionando. Lista en /lista.m3u", 200
 
 @app.route('/lista.m3u')
-def generar_lista():
+def m3u_gen():
     host = request.host_url.rstrip('/')
-    m3u = "#EXTM3U\r\n"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
     
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-
+    m3u = "#EXTM3U\n"
+    
     try:
-        # 1. Escaneamos la web principal para sacar las películas
-        r = requests.get(WEB_SXX_HOME, headers=headers, timeout=15)
-        # Buscamos los slugs de las películas y sus nombres
-        # Este regex captura el enlace y el título de los artículos
-        patron = re.findall(r'href="https://2000peliculassigloxx\.com/([^"/]+)/".*?>(.*?)</a>', r.text, re.DOTALL)
+        # 1. Obtenemos la web principal
+        r = requests.get(BASE_URL, headers=headers, timeout=10)
+        # 2. Buscamos solo los bloques de artículos para evitar el código JS
+        # Buscamos: href="URL" ... title="TITULO"
+        movies = re.findall(r'<article.*?\s+href="https://2000peliculassigloxx\.com/([^"/]+)/".*?title="(.*?)".*?>', r.text, re.DOTALL)
         
-        encontrados = set()
-        for slug, titulo_sucia in patron:
-            titulo = re.sub('<[^<]+?>', '', titulo_sucia).strip() # Limpiamos HTML del título
-            
-            if slug in ['decadas', 'biografias', 'sagas', 'contacto', 'aplicacion'] or len(titulo) < 3:
+        added = set()
+        for slug, title in movies:
+            if slug in added or "PolÃ­tica" in title or "Contacto" in title:
                 continue
             
-            if slug not in encontrados:
-                foto = f"https://2000peliculassigloxx.com/wp-content/uploads/{slug}.jpg"
-                m3u += f'#EXTINF:-1 tvg-logo="{foto}" group-title="Cine Siglo XX", {titulo}\r\n'
-                m3u += f'{host}/video/{slug}\r\n'
-                encontrados.add(slug)
-    except:
-        m3u += "# ERROR AL CARGAR LISTA\n"
-
+            # Limpiamos el título de caracteres extraños
+            clean_title = title.replace("Ver online", "").replace("descargar", "").strip()
+            # Imagen por defecto (puedes ajustarla)
+            img = f"{BASE_URL}/wp-content/uploads/{slug}.jpg"
+            
+            m3u += f'#EXTINF:-1 tvg-logo="{img}" group-title="Cine Siglo XX", {clean_title}\n'
+            m3u += f'{host}/video/{slug}\n'
+            added.add(slug)
+            
+    except Exception as e:
+        m3u += f"# Error: {str(e)}\n"
+        
     return Response(m3u, mimetype='application/x-mpegurl')
 
 @app.route('/video/<slug>')
-def get_video(slug):
-    # Intentamos encontrar el código de Yandex (ej: nFSeFHQcutFp3g)
+def get_stream(slug):
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': f'https://videos.2000peliculassigloxx.com/{slug}/'
+        'User-Agent': 'Mozilla/5.0',
+        'Referer': f"{VIDEO_SERVER}/{slug}/"
     }
     
     try:
-        # Entramos al embed oficial de la película
-        r = requests.get(f"https://videos.2000peliculassigloxx.com/{slug}/embed/", headers=headers, timeout=10)
+        # Entramos a la página de video para buscar el ID de Yandex
+        r = requests.get(f"{VIDEO_SERVER}/{slug}/embed/", headers=headers, timeout=10)
         
-        # Buscamos el ID del video que va después de ?v=
-        id_video = re.search(r'yadisk\.html\?v=([a-zA-Z0-9_-]+)', r.text)
+        # Buscamos el ID que está después de yadisk.html?v=
+        id_match = re.search(r'yadisk\.html\?v=([a-zA-Z0-9_-]+)', r.text)
         
-        if id_video:
-            # Construimos el link de streaming directo que me pasaste
-            direct_stream = f"https://streaming.2000peliculassigloxx.com/yandex/yadisk.html?v={id_video.group(1)}"
-            return redirect(direct_stream, code=302)
+        if id_match:
+            video_id = id_match.group(1)
+            # Redirigimos al link directo que descubrimos que funciona
+            return redirect(f"{STREAM_SERVER}{video_id}", code=302)
+        
+        # Si no hay Yandex, intentamos buscar cualquier MP4 directo
+        mp4_match = re.search(r'source src="(.*?\.mp4)"', r.text)
+        if mp4_match:
+            return redirect(mp4_match.group(1), code=302)
             
-        # Si no lo encuentra por ID, intentamos redirigir al embed normal
-        return redirect(f"https://videos.2000peliculassigloxx.com/{slug}/embed/", code=302)
     except:
-        return "Error", 500
+        pass
+        
+    return "Video no disponible", 404
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
