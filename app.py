@@ -5,77 +5,58 @@ import os
 
 app = Flask(__name__)
 
-# URL base del streaming que confirmaste que funciona
-STREAM_BASE = "https://streaming.2000peliculassigloxx.com/yandex/yadisk.html?v="
-WEB_HOME = "https://2000peliculassigloxx.com"
+# Intentamos imitar a un navegador real al 100%
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'es-ES,es;q=0.9',
+    'Referer': 'https://videos.2000peliculassigloxx.com/',
+    'Connection': 'keep-alive'
+}
 
 @app.route('/')
 def home():
-    return "<h1>SERVIDOR LISTO</h1><p>Carga esto en PotPlayer (Ctrl+U): <b>/lista.m3u</b></p>", 200
+    return "Servidor activo. Usa /lista.m3u en PotPlayer", 200
 
 @app.route('/lista.m3u')
 def generar_lista():
     host = request.host_url.rstrip('/')
+    # Solo una película para probar que funcione el motor
     m3u = "#EXTM3U\r\n"
-    
-    # --- 1. PELÍCULA FIJA (CASABLANCA) ---
-    # Esta es la que sabemos que el ID es nFSeFHQcutFp3g
-    img_casa = "https://2000peliculassigloxx.com/wp-content/uploads/una-noche-en-casablanca.jpg"
-    m3u += f'#EXTINF:-1 tvg-logo="{img_casa}" group-title="Clásicos", Una noche en Casablanca\r\n'
-    # Redirigimos al ID manual que conseguiste
+    m3u += '#EXTINF:-1, Una noche en Casablanca\r\n'
     m3u += f'{host}/video/nFSeFHQcutFp3g\r\n'
-
-    # --- 2. ESCÁNER AUTOMÁTICO (LIMPIO) ---
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-    try:
-        r = requests.get(WEB_HOME, headers=headers, timeout=10)
-        # Buscamos solo bloques que parezcan artículos de películas
-        patron = re.findall(r'href="https://2000peliculassigloxx\.com/([^"/]+)/".*?title="(.*?)".*?>', r.text, re.DOTALL)
-        
-        encontrados = set()
-        palabras_prohibidas = ['wp-json', 'decadas', 'biografias', 'aplicacion', 'contacto', 'politica', 'sagas', 'feed', 'comments']
-
-        for slug, titulo_sucio in patron:
-            # FILTRO DE BASURA: Si el slug tiene palabras prohibidas, lo saltamos
-            if any(x in slug for x in palabras_prohibidas) or slug in encontrados:
-                continue
-            
-            titulo = titulo_sucio.replace("Ver online", "").replace("descargar", "").strip()
-            
-            # Solo añadimos si el título parece real (más de 2 letras)
-            if len(titulo) > 2:
-                img = f"https://2000peliculassigloxx.com/wp-content/uploads/{slug}.jpg"
-                m3u += f'#EXTINF:-1 tvg-logo="{img}" group-title="Novedades", {titulo}\r\n'
-                # Para las automáticas, usamos la ruta de búsqueda
-                m3u += f'{host}/buscar/{slug}\r\n'
-                encontrados.add(slug)
-
-    except:
-        pass # Si falla el escaneo, al menos saldrá Casablanca
-
     return Response(m3u, mimetype='application/x-mpegurl')
 
-# RUTA 1: Para cuando YA TENEMOS el ID (Caso Casablanca)
-@app.route('/video/<id_video>')
-def directo(id_video):
-    # REDIRECCIÓN PURA: No procesamos nada, enviamos a PotPlayer al link que funciona
-    return redirect(f"{STREAM_BASE}{id_video}", code=302)
-
-# RUTA 2: Para buscar el ID de las otras películas
-@app.route('/buscar/<slug>')
-def buscar(slug):
+@app.route('/video/<v_id>')
+def get_real_video(v_id):
+    # Esta es la URL de la página que me pasaste
+    web_url = f"https://streaming.2000peliculassigloxx.com/yandex/yadisk.html?v={v_id}"
+    
     try:
-        # Aquí sí tenemos que entrar a buscar el ID
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        r = requests.get(f"https://videos.2000peliculassigloxx.com/{slug}/embed/", headers=headers, timeout=5)
-        match = re.search(r'yadisk\.html\?v=([a-zA-Z0-9_-]+)', r.text)
-        if match:
-            # Si encontramos el ID, lo mandamos a la ruta directa
-            return redirect(f"{STREAM_BASE}{match.group(1)}", code=302)
-        else:
-            return "ID no encontrado", 404
-    except:
-        return "Error buscando ID", 404
+        # El servidor entra a la página web por ti
+        session = requests.Session()
+        r = session.get(web_url, headers=HEADERS, timeout=10)
+        
+        # BUSQUEDA DEL VIDEO REAL (.mp4)
+        # Buscamos dentro del código HTML el enlace que termina en .mp4 o tiene la firma de Yandex Storage
+        # Intentamos varios patrones comunes en Yandex Disk
+        links = re.findall(r'(https?://[^\s"\'\\]+(?:\.mp4|storage\.yandex\.net)[^\s"\'\\]+)', r.text)
+        
+        if links:
+            # Limpiamos el link de caracteres raros de programación (\u0026 -> &)
+            video_directo = links[0].replace('\\u0026', '&').replace('&amp;', '&')
+            # Redirigimos a PotPlayer al archivo real
+            return redirect(video_directo, code=302)
+        
+        # Si no lo encuentra, intentamos buscar el "src" de la etiqueta video
+        src_match = re.search(r'src=["\'](https?://.*?)["\']', r.text)
+        if src_match:
+            return redirect(src_match.group(1), code=302)
+
+        return "No se pudo extraer el archivo de video. Yandex bloqueó la conexión.", 403
+        
+    except Exception as e:
+        return f"Error de conexión: {str(e)}", 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
