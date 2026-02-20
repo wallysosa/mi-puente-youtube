@@ -1,53 +1,72 @@
 import os
 import requests
-from flask import Flask, Response
+from flask import Flask, Response, redirect
 
 app = Flask(__name__)
 
-# Aquí pegás directamente los links de la API que quieras procesar
-LINKS_API = [
-    "https://api.instant.audio/data/streams/30/alfa-montevideo",
-    "https://api.instant.audio/data/streams/30/azul",
-    "https://api.instant.audio/data/streams/30/oceano-fm",
-    "https://api.instant.audio/data/streams/30/radio-cero",
-    "https://api.instant.audio/data/streams/30/sport-890",
-    "https://api.instant.audio/data/streams/30/universal-montevideo"
+# 1. Corregido: La URL debe ir entre comillas
+BASE_URL = "https://cine-unificado-m3u.onrender.com"
+
+# 2. Lista de Slugs (Solo el nombre identificador, el código arma el resto)
+SLUGS = [
+    "alfa-montevideo", "aspen-punta-del-este", "azul", "radio-carve",
+    "carve-deportiva-1010", "conquistador-treinta-y-tres", "del-plata-fm",
+    "del-sol-montevideo", "radio-el-espectador", "sur", "fm-hit-90-3",
+    "inolvidable-montevideo", "la-30-montevideo", "voz-de-melo",
+    "m24-montevideo", "metropolis-fm", "oceano-fm", "aire", "arapey",
+    "babel", "centenario-montevideo", "city", "clarin", "clasica",
+    "colonia", "disney", "durazno-montevideo", "futura", "radio-maria-uruguay",
+    "monte-carlo", "oriental", "rural-montevideo", "1280-am-tacuarembo",
+    "universal-montevideo", "zorrilla-de-san-martin", "radio-cero",
+    "reflejos", "sarandi", "sport-890", "sur-fm", "exito-paysandu"
 ]
 
-def procesar_radio(api_url):
+@app.route('/')
+def home():
+    return "SERVIDOR ACTIVO - LISTA EN: /antel.m3u", 200
+
+# 3. Unificamos la ruta para que responda en /antel.m3u
+@app.route('/antel.m3u')
+def generar_lista():
+    m3u = "#EXTM3U Astra\r\n"
+    
+    for slug in SLUGS:
+        # Embellecer el nombre (ej: radio-cero -> Radio Cero)
+        nombre = slug.replace("-", " ").title()
+        logo = f"https://cdn.instant.audio/images/logos/radios-com-uy/{slug}.png"
+        
+        # El link apunta a tu servidor, que luego hará la redirección
+        m3u += f'#EXTINF:-1 tvg-logo="{logo}" group-title="URUGUAY", {nombre}\r\n'
+        m3u += f'{BASE_URL}/radio/{slug}\r\n'
+    
+    return Response(m3u, mimetype='application/x-mpegurl')
+
+@app.route('/radio/<slug>')
+def redireccionar_a_streaming(slug):
+    # El servidor va a la API a buscar el link real cada vez que das Play
+    api_url = f"https://api.instant.audio/data/streams/30/{slug}"
     headers = {"User-Agent": "Mozilla/5.0"}
+    
     try:
         r = requests.get(api_url, headers=headers, timeout=5)
         if r.status_code == 200:
             data = r.json()
-            station = data.get("result", {}).get("station", {})
             streams = data.get("result", {}).get("streams", [])
             
-            # Sacamos los datos automáticamente del JSON
-            nombre = station.get("title", "Radio Sin Nombre")
-            slug = station.get("name", "")
-            
-            # Buscamos la URL de audio (MP3 preferentemente)
+            # Buscamos el link de audio real
             url_audio = None
             for s in streams:
-                if s.get("mediaType") == "MP3" and "http" in s.get("url"):
+                if s.get("mediaType") in ["MP3", "AAC", "MPEG"] and "http" in s.get("url"):
                     url_audio = s.get("url")
                     break
             
-            if url_audio and slug:
-                logo = f"https://cdn.instant.audio/images/logos/radios-com-uy/{slug}.png"
-                return f'#EXTINF:-1 tvg-logo="{logo}" group-title="URUGUAY", {nombre}\n{url_audio}\n'
+            if url_audio:
+                # Esto manda a PotPlayer directamente al flujo de música
+                return redirect(url_audio, code=302)
     except:
         pass
-    return ""
-
-@app.route('/')
-def home():
-    m3u = "#EXTM3U\n"
-    for link in LINKS_API:
-        m3u += procesar_radio(link)
     
-    return Response(m3u, mimetype='text/plain')
+    return "Error: No se pudo encontrar el flujo de audio", 404
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
