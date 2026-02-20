@@ -1,63 +1,109 @@
-from flask import Flask, redirect, Response, request
-import requests
-import re
+from flask import Flask, Response, render_template_string, request
 import os
+import uuid
+from functools import wraps
 
 app = Flask(__name__)
 
-# Intentamos imitar a un navegador real al 100%
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Language': 'es-ES,es;q=0.9',
-    'Referer': 'https://videos.2000peliculassigloxx.com/',
-    'Connection': 'keep-alive'
-}
+# ==========================================
+# CONFIGURACIÓN DE SEGURIDAD (Cámbialos aquí)
+# ==========================================
+USUARIO = "admin"
+CLAVE = "1234"
+
+def requiere_clave(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.authorization
+        if not auth or not (auth.username == USUARIO and auth.password == CLAVE):
+            return Response(
+                'Acceso denegado. Ingresa credenciales.', 401,
+                {'WWW-Authenticate': 'Basic realm="Login Required"'}
+            )
+        return f(*args, **kwargs)
+    return decorated
+
+# ==========================================
+# PLANTILLA VISUAL (PANEL DE CONTROL)
+# ==========================================
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel Seguro - Puente Antel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; display: flex; justify-content: center; }
+        .card { background: #1e293b; border-radius: 16px; padding: 24px; max-width: 450px; width: 100%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); border: 1px solid #334155; }
+        h1 { color: #3b82f6; font-size: 1.5rem; margin-bottom: 10px; }
+        .status-pill { background: #065f46; color: #34d399; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; }
+        .url-section { background: #020617; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px dashed #3b82f6; position: relative; }
+        .url-text { font-family: 'Courier New', monospace; color: #60a5fa; font-size: 0.85rem; word-break: break-all; }
+        .btn { display: block; background: #2563eb; color: white; text-align: center; padding: 12px; text-decoration: none; border-radius: 8px; font-weight: bold; transition: 0.3s; }
+        .btn:hover { background: #1d4ed8; }
+        .channels { text-align: left; font-size: 0.9rem; color: #94a3b8; margin-top: 20px; }
+        ul { padding-left: 20px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🚀 Puente Antel TV</h1>
+        <span class="status-pill">● SERVIDOR ACTIVO</span>
+        
+        <div class="url-section">
+            <p style="margin-top:0; font-size: 0.8rem; color: #64748b;">Enlace para tu App IPTV:</p>
+            <div class="url-text">{{ url_m3u }}</div>
+        </div>
+
+        <a href="/antel.m3u" class="btn">Abrir Lista M3U</a>
+
+        <div class="channels">
+            <strong>Canales incluidos:</strong>
+            <ul>
+                <li>Vera+ (Antel)</li>
+                <li>Canal 5, 10 y 4</li>
+                <li>TV Ciudad</li>
+                <li>Eventos 1, 2 y 3 (Automáticos)</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+# ==========================================
+# RUTAS DEL SERVIDOR
+# ==========================================
 
 @app.route('/')
+@requiere_clave
 def home():
-    return "Servidor activo. Usa /lista.m3u en PotPlayer", 200
+    # Obtiene la URL real del servidor en Render
+    host = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'puente-antel.onrender.com')}/antel.m3u"
+    return render_template_string(HTML_TEMPLATE, url_m3u=host)
 
-@app.route('/lista.m3u')
+@app.route('/antel.m3u')
 def generar_lista():
-    host = request.host_url.rstrip('/')
-    # Solo una película para probar que funcione el motor
+    # Definición de canales y logos
+    canales = [
+        ("Vera+ (Antel)", "https://antel-veraplus-live.fing.edu.uy/hls/veraplus.m3u8", "https://upload.wikimedia.org/wikipedia/commons/4/40/Antel_logo.svg"),
+        ("Canal 5 Uruguay", "https://vencat-canal5.fing.edu.uy/hls/canal5.m3u8", "https://www.gub.uy/ministerio-educacion-cultura/sites/ministerio-educacion-cultura/files/logo_canal5.png"),
+        ("Canal 10", "https://vencat-canal10.fing.edu.uy/hls/canal10.m3u8", "https://upload.wikimedia.org/wikipedia/commons/f/fe/Canal_10_Uruguay_logo.png"),
+        ("Canal 4", "https://vencat-canal4.fing.edu.uy/hls/canal4.m3u8", "https://es.wikipedia.org/wiki/Archivo:Canal_4_Uruguay_2022.png"),
+        ("TV Ciudad", "https://streaming.tvciudad.uy/hls/tvciudad.m3u8", "https://www.tvciudad.uy/wp-content/uploads/2021/05/logo-tvciudad.png"),
+        ("Antel Eventos 1", "https://antel-eventos1-live.fing.edu.uy/hls/eventos1.m3u8", "https://upload.wikimedia.org/wikipedia/commons/4/40/Antel_logo.svg"),
+        ("Antel Eventos 2", "https://antel-eventos2-live.fing.edu.uy/hls/eventos2.m3u8", "https://upload.wikimedia.org/wikipedia/commons/4/40/Antel_logo.svg"),
+        ("Antel Eventos 3", "https://antel-eventos3-live.fing.edu.uy/hls/eventos3.m3u8", "https://upload.wikimedia.org/wikipedia/commons/4/40/Antel_logo.svg")
+    ]
+
     m3u = "#EXTM3U\r\n"
-    m3u += '#EXTINF:-1, Una noche en Casablanca\r\n'
-    m3u += f'{host}/video/nFSeFHQcutFp3g\r\n'
+    for nombre, url, logo in canales:
+        m3u += f'#EXTINF:-1 tvg-logo="{logo}" group-title="URUGUAY", {nombre}\r\n{url}\r\n'
+    
     return Response(m3u, mimetype='application/x-mpegurl')
 
-@app.route('/video/<v_id>')
-def get_real_video(v_id):
-    # Esta es la URL de la página que me pasaste
-    web_url = f"https://streaming.2000peliculassigloxx.com/yandex/yadisk.html?v={v_id}"
-    
-    try:
-        # El servidor entra a la página web por ti
-        session = requests.Session()
-        r = session.get(web_url, headers=HEADERS, timeout=10)
-        
-        # BUSQUEDA DEL VIDEO REAL (.mp4)
-        # Buscamos dentro del código HTML el enlace que termina en .mp4 o tiene la firma de Yandex Storage
-        # Intentamos varios patrones comunes en Yandex Disk
-        links = re.findall(r'(https?://[^\s"\'\\]+(?:\.mp4|storage\.yandex\.net)[^\s"\'\\]+)', r.text)
-        
-        if links:
-            # Limpiamos el link de caracteres raros de programación (\u0026 -> &)
-            video_directo = links[0].replace('\\u0026', '&').replace('&amp;', '&')
-            # Redirigimos a PotPlayer al archivo real
-            return redirect(video_directo, code=302)
-        
-        # Si no lo encuentra, intentamos buscar el "src" de la etiqueta video
-        src_match = re.search(r'src=["\'](https?://.*?)["\']', r.text)
-        if src_match:
-            return redirect(src_match.group(1), code=302)
-
-        return "No se pudo extraer el archivo de video. Yandex bloqueó la conexión.", 403
-        
-    except Exception as e:
-        return f"Error de conexión: {str(e)}", 500
-
 if __name__ == "__main__":
+    # Render asigna el puerto automáticamente
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
