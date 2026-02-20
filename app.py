@@ -4,58 +4,48 @@ from flask import Flask, Response
 
 app = Flask(__name__)
 
-# Esta es nuestra lista de "motores" (los slugs que sacamos del HTML)
-RADIOS_URUGUAY = [
-    ("Alfa (Montevideo)", "alfa-montevideo"),
-    ("Azul FM", "azul"),
-    ("Océano FM", "oceano-fm"),
-    ("Sport 890", "sport-890"),
-    ("Del Sol", "del-sol-montevideo"),
-    ("Radio Monte Carlo", "monte-carlo"),
-    ("Radiocero", "radio-cero"),
-    ("Radio Clarín", "clarin"),
-    ("Universal", "universal-montevideo")
-    # Puedes seguir agregando los de la lista anterior aquí...
+# Aquí pegás directamente los links de la API que quieras procesar
+LINKS_API = [
+    "https://api.instant.audio/data/streams/30/alfa-montevideo",
+    "https://api.instant.audio/data/streams/30/azul",
+    "https://api.instant.audio/data/streams/30/oceano-fm",
+    "https://api.instant.audio/data/streams/30/radio-cero",
+    "https://api.instant.audio/data/streams/30/sport-890",
+    "https://api.instant.audio/data/streams/30/universal-montevideo"
 ]
 
-def buscar_stream_real(slug):
-    """
-    Esta función entra al JSON que me pasaste y busca la mejor URL de audio.
-    """
-    api_url = f"https://api.instant.audio/data/streams/30/{slug}"
+def procesar_radio(api_url):
     headers = {"User-Agent": "Mozilla/5.0"}
-    
     try:
-        response = requests.get(api_url, headers=headers, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
+        r = requests.get(api_url, headers=headers, timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            station = data.get("result", {}).get("station", {})
             streams = data.get("result", {}).get("streams", [])
             
-            # Buscamos la URL que sea MP3 y que NO sea un HTML
+            # Sacamos los datos automáticamente del JSON
+            nombre = station.get("title", "Radio Sin Nombre")
+            slug = station.get("name", "")
+            
+            # Buscamos la URL de audio (MP3 preferentemente)
+            url_audio = None
             for s in streams:
-                url = s.get("url")
-                # Priorizamos HTTPS y MP3 directo
-                if url and "http" in url and s.get("mediaType") == "MP3":
-                    return url
-    except Exception:
+                if s.get("mediaType") == "MP3" and "http" in s.get("url"):
+                    url_audio = s.get("url")
+                    break
+            
+            if url_audio and slug:
+                logo = f"https://cdn.instant.audio/images/logos/radios-com-uy/{slug}.png"
+                return f'#EXTINF:-1 tvg-logo="{logo}" group-title="URUGUAY", {nombre}\n{url_audio}\n'
+    except:
         pass
-    return None
+    return ""
 
 @app.route('/')
-def generar_m3u():
-    """
-    Ruta principal que genera el archivo para el Bloc de Notas o PotPlayer.
-    """
-    m3u = "#EXTM3U\r\n"
-    
-    for nombre, slug in RADIOS_URUGUAY:
-        print(f"Procesando: {nombre}...") # Esto se ve en los logs de Render
-        stream_directo = buscar_stream_real(slug)
-        
-        if stream_directo:
-            logo = f"https://cdn.instant.audio/images/logos/radios-com-uy/{slug}.png"
-            m3u += f'#EXTINF:-1 tvg-logo="{logo}" group-title="URUGUAY", {nombre}\r\n'
-            m3u += f'{stream_directo}\r\n'
+def home():
+    m3u = "#EXTM3U\n"
+    for link in LINKS_API:
+        m3u += procesar_radio(link)
     
     return Response(m3u, mimetype='text/plain')
 
