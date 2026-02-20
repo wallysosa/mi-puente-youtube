@@ -4,10 +4,8 @@ from flask import Flask, Response, redirect
 
 app = Flask(__name__)
 
-# 1. Corregido: La URL debe ir entre comillas
 BASE_URL = "https://cine-unificado-m3u.onrender.com"
 
-# 2. Lista de Slugs (Solo el nombre identificador, el código arma el resto)
 SLUGS = [
     "alfa-montevideo", "aspen-punta-del-este", "azul", "radio-carve",
     "carve-deportiva-1010", "conquistador-treinta-y-tres", "del-plata-fm",
@@ -25,48 +23,48 @@ SLUGS = [
 def home():
     return "SERVIDOR ACTIVO - LISTA EN: /antel.m3u", 200
 
-# 3. Unificamos la ruta para que responda en /antel.m3u
 @app.route('/antel.m3u')
 def generar_lista():
-    m3u = "#EXTM3U Astra\r\n"
-    
+    m3u = "#EXTM3U\r\n"
     for slug in SLUGS:
-        # Embellecer el nombre (ej: radio-cero -> Radio Cero)
         nombre = slug.replace("-", " ").title()
         logo = f"https://cdn.instant.audio/images/logos/radios-com-uy/{slug}.png"
-        
-        # El link apunta a tu servidor, que luego hará la redirección
         m3u += f'#EXTINF:-1 tvg-logo="{logo}" group-title="URUGUAY", {nombre}\r\n'
-        m3u += f'{BASE_URL}/radio/{slug}\r\n'
-    
+        # Importante: PotPlayer prefiere ver una extensión al final aunque sea falsa
+        m3u += f'{BASE_URL}/radio/{slug}/stream.mp3\r\n'
     return Response(m3u, mimetype='application/x-mpegurl')
 
+@app.route('/radio/<slug>/stream.mp3')
 @app.route('/radio/<slug>')
 def redireccionar_a_streaming(slug):
-    # El servidor va a la API a buscar el link real cada vez que das Play
     api_url = f"https://api.instant.audio/data/streams/30/{slug}"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    # Headers para engañar a la API y que crea que somos un navegador
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
     
     try:
-        r = requests.get(api_url, headers=headers, timeout=5)
+        r = requests.get(api_url, headers=headers, timeout=10)
         if r.status_code == 200:
             data = r.json()
             streams = data.get("result", {}).get("streams", [])
             
-            # Buscamos el link de audio real
-            url_audio = None
-            for s in streams:
-                if s.get("mediaType") in ["MP3", "AAC", "MPEG"] and "http" in s.get("url"):
-                    url_audio = s.get("url")
-                    break
+            # 1. Intentamos buscar MP3 directo
+            url_audio = next((s['url'] for s in streams if s.get('mediaType') == "MP3" and "http" in s.get("url")), None)
             
+            # 2. Si no hay MP3, buscamos AAC o cualquier flujo de audio
+            if not url_audio:
+                url_audio = next((s['url'] for s in streams if s.get('mediaType') in ["AAC", "MPEG"] and "http" in s.get("url")), None)
+
             if url_audio:
-                # Esto manda a PotPlayer directamente al flujo de música
+                # Algunas radios requieren que la URL no termine en redirect simple
+                # Redirigimos con un código 301 (Permanente) o 302
                 return redirect(url_audio, code=302)
-    except:
-        pass
+                
+    except Exception as e:
+        print(f"Error en {slug}: {e}")
     
-    return "Error: No se pudo encontrar el flujo de audio", 404
+    return f"Error: No se pudo encontrar el flujo para {slug}", 404
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
