@@ -26,11 +26,15 @@ def get_yt_stream(youtube_id):
         url_cache, ts = _yt_cache[youtube_id]
         if ahora - ts < YT_CACHE_TTL:
             return url_cache
+    # Aceptar URL completa o solo el ID
+    if youtube_id.startswith('http'):
+        yt_url = youtube_id
+    else:
+        yt_url = f'https://www.youtube.com/watch?v={youtube_id}'
     try:
         result = subprocess.run(
             ['yt-dlp', '--no-warnings', '--quiet',
-             '-f', 'best[ext=mp4]/best', '-g',
-             f'https://www.youtube.com/watch?v={youtube_id}'],
+             '-f', 'best[ext=mp4]/best', '-g', yt_url],
             capture_output=True, text=True, timeout=30
         )
         url = result.stdout.strip().split('\n')[0]
@@ -84,8 +88,9 @@ def canales_m3u():
         grupo_     = canal.get('grupo',  'Latino')
         pais_      = canal.get('pais',   '')
         stream     = canal.get('stream', '')
-        youtube_id = canal.get('youtube_id', '')
-        dai_id     = ''
+        youtube_id   = canal.get('youtube_id', '')
+        youtube_live = canal.get('youtube_live', '')
+        dai_id       = ''
 
         # Extraer event ID de URL DAI
         if stream and 'dai.google.com/linear/hls/event/' in stream:
@@ -94,8 +99,12 @@ def canales_m3u():
         if dai_id:
             # DAI → proxy del servidor para renovar automáticamente
             url = f"{BASE_URL}/dai/{dai_id}#.m3u8"
+        elif youtube_live:
+            # URL @canal/live → yt-dlp
+            yt_enc = requests.utils.quote(youtube_live, safe='')
+            url = f"{BASE_URL}/ytlive/{yt_enc}#.m3u8"
         elif youtube_id:
-            # YouTube sin DAI → yt-dlp
+            # YouTube ID → yt-dlp
             url = f"{BASE_URL}/ytlive/{youtube_id}#.m3u8"
         elif stream:
             # URL directa (akamaized, etc.)
