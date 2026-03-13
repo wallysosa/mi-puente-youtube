@@ -2,12 +2,19 @@ import os
 import json
 import subprocess
 import time
+import requests
 from flask import Flask, Response, redirect, request
 
 app = Flask(__name__)
 
-BASE_URL = os.environ.get('MY_APP_URL', 'https://mi-puente-youtube.onrender.com')
+BASE_URL    = os.environ.get('MY_APP_URL', 'https://mi-puente-youtube.onrender.com')
 CANALES_FILE = 'canales_yt.json'
+
+PROXY_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+    "Referer":    "https://www.youtube.com/",
+    "Origin":     "https://www.youtube.com",
+}
 
 # ── Cache yt-dlp (2 horas) ───────────────────────────────────────────────────
 _yt_cache = {}
@@ -56,12 +63,6 @@ def home():
 
 @app.route('/canales.m3u')
 def canales_m3u():
-    """
-    Genera el m3u con todos los canales.
-    Canales DAI (dai.google.com) → URL directa.
-    Canales YouTube (youtube_id) → /ytlive/<id> que extrae con yt-dlp.
-    Filtros opcionales: ?pais=MX ?grupo=Noticias ?buscar=azteca
-    """
     pais   = request.args.get('pais',   '').upper()
     grupo  = request.args.get('grupo',  '').lower()
     buscar = request.args.get('buscar', '').lower()
@@ -84,12 +85,22 @@ def canales_m3u():
         pais_      = canal.get('pais',   '')
         stream     = canal.get('stream', '')
         youtube_id = canal.get('youtube_id', '')
+        dai_id     = ''
 
-        # Canales YouTube sin DAI → proxy yt-dlp
-        if youtube_id:
-            stream = f"{BASE_URL}/ytlive/{youtube_id}#.m3u8"
+        # Extraer event ID de URL DAI
+        if stream and 'dai.google.com/linear/hls/event/' in stream:
+            dai_id = stream.split('/event/')[1].split('/')[0]
 
-        if not stream:
+        if dai_id:
+            # DAI → proxy del servidor para renovar automáticamente
+            url = f"{BASE_URL}/dai/{dai_id}#.m3u8"
+        elif youtube_id:
+            # YouTube sin DAI → yt-dlp
+            url = f"{BASE_URL}/ytlive/{youtube_id}#.m3u8"
+        elif stream:
+            # URL directa (akamaized, etc.)
+            url = stream
+        else:
             continue
 
         m3u += (
@@ -99,18 +110,92 @@ def canales_m3u():
             f'group-title="{grupo_}", '
             f'{nombre}\r\n'
             f'#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36\r\n'
-            f'{stream}\r\n'
+            f'{url}\r\n'
         )
 
     return Response(m3u, mimetype='application/x-mpegurl')
 
 
+@app.route('/dai/<dai_id>')
+def dai_proxy(dai_id):
+    """
+    Proxy para canales DAI de Google.
+    Descarga el master.m3u8 y reescribe todas las URLs internas
+    para que pasen por el servidor — así VLC nunca recibe URLs que expiran.
+    """
+    dai_id = dai_id.rstrip('#').strip()
+    master_url = f"https://dai.google.com/linear/hls/event/{dai_id}/master.m3u8"
+
+    try:
+        r = requests.get(master_url, headers=PROXY_HEADERS, timeout=15, allow_redirects=True)
+        r.raise_for_status()
+        real_url = r.url  # URL final después de redirecciones
+        text     = r.text
+    except Exception as e:
+        return f"Error obteniendo DAI stream: {e}", 502
+
+    # Base para resolver URLs relativas
+    base = real_url.rsplit('/', 1)[0] + '/'
+
+    salida = []
+    for linea in text.splitlines():
+        linea = linea.strip()
+        if linea and not linea.startswith('#'):
+            # Sub-playlist → proxy
+            abs_url = linea if linea.startswith('http') else base + linea
+            linea   = f"{BASE_URL}/dai-segment?url={requests.utils.quote(abs_url, safe='')}"
+        salida.append(linea)
+
+    contenido = '\n'.join(salida)
+    return Response(contenido, mimetype='application/x-mpegurl',
+                    headers={'Access-Control-Allow-Origin': '*'})
+
+
+@app.route('/dai-segment')
+def dai_segment():
+    """
+    Proxy para sub-playlists y segmentos .ts de canales DAI.
+    Renueva automáticamente las URLs cuando expiran.
+    """
+    url = request.args.get('url', '')
+    if not url:
+        return "Falta url", 400
+
+    try:
+        r = requests.get(url, headers=PROXY_HEADERS, stream=True, timeout=20)
+        r.raise_for_status()
+    except Exception as e:
+        return f"Error segmento DAI: {e}", 502
+
+    content_type = r.headers.get('Content-Type', 'application/octet-stream')
+
+    # Si es m3u8 → reescribir URLs internas también
+    if 'mpegurl' in content_type or url.split('?')[0].endswith('.m3u8'):
+        text = r.text
+        base = url.rsplit('/', 1)[0] + '/'
+        salida = []
+        for linea in text.splitlines():
+            linea = linea.strip()
+            if linea and not linea.startswith('#'):
+                abs_url = linea if linea.startswith('http') else base + linea
+                linea   = f"{BASE_URL}/dai-segment?url={requests.utils.quote(abs_url, safe='')}"
+            salida.append(linea)
+        return Response('\n'.join(salida), mimetype='application/x-mpegurl',
+                        headers={'Access-Control-Allow-Origin': '*'})
+
+    # Si es .ts → streaming directo
+    def generar():
+        for chunk in r.iter_content(chunk_size=65536):
+            if chunk:
+                yield chunk
+
+    return Response(generar(), content_type=content_type,
+                    headers={'Access-Control-Allow-Origin': '*'})
+
+
 @app.route('/ytlive/<youtube_id>')
 def ytlive(youtube_id):
-    """
-    Extrae URL del live de YouTube con yt-dlp y redirige.
-    Cacheado por 2 horas.
-    """
+    """Extrae URL del live de YouTube con yt-dlp y redirige. Cacheado 2 horas."""
     youtube_id = youtube_id.rstrip('#').strip()
     url = get_yt_stream(youtube_id)
     if not url:
@@ -120,14 +205,19 @@ def ytlive(youtube_id):
 
 @app.route('/lista')
 def lista():
-    """Lista HTML de todos los canales disponibles."""
     canales = cargar_canales()
     filas = ""
     for c in canales:
         nombre = c.get('nombre', '')
         pais   = c.get('pais', '')
         grupo  = c.get('grupo', '')
-        tipo   = 'YouTube (yt-dlp)' if c.get('youtube_id') else 'DAI / Directo'
+        stream = c.get('stream', '')
+        if c.get('youtube_id'):
+            tipo = 'YouTube (yt-dlp)'
+        elif 'dai.google.com' in stream:
+            tipo = 'DAI Google (proxy)'
+        else:
+            tipo = 'Directo'
         filas += f"<tr><td>{nombre}</td><td>{pais}</td><td>{grupo}</td><td>{tipo}</td></tr>"
 
     return f"""
