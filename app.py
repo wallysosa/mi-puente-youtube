@@ -39,6 +39,25 @@ def canales_json():
     except Exception as e:
         return f"Error: {e}", 502
 
+BASE_URL = os.environ.get('MY_APP_URL', 'https://mi-puente-youtube.onrender.com')
+
+@app.route('/ytlive/<path:yt_url>')
+def ytlive(yt_url):
+    """Redirige a la URL fresca del JSON para ese canal."""
+    import urllib.parse
+    yt_url = urllib.parse.unquote(yt_url).rstrip('#')
+    try:
+        canales = get_canales()
+        # Buscar por nombre en el JSON
+        for c in canales:
+            if c.get('nombre','').lower() in yt_url.lower() or yt_url in c.get('stream',''):
+                if c.get('stream'):
+                    from flask import redirect
+                    return redirect(c['stream'])
+    except:
+        pass
+    return "Stream no encontrado", 404
+
 @app.route('/canales.m3u')
 def canales_m3u():
     try:
@@ -48,13 +67,41 @@ def canales_m3u():
 
     lineas = ["#EXTM3U"]
     for c in canales:
-        if not c.get('stream'):
+        nombre = c.get('nombre', '')
+        stream = c.get('stream', '')
+        if not stream:
             continue
-        lineas.append(f'#EXTINF:-1 tvg-logo="{c["logo"]}" tvg-country="{c["pais"]}" group-title="{c["grupo"]}", {c["nombre"]}')
+        # Para canales YouTube (googlevideo) usar proxy del servidor
+        if 'googlevideo.com' in stream:
+            import urllib.parse
+            enc = urllib.parse.quote(nombre, safe='')
+            url = f"{BASE_URL}/stream/{enc}#.m3u8"
+        else:
+            url = stream
+        lineas.append(f'#EXTINF:-1 tvg-logo="{c["logo"]}" tvg-country="{c["pais"]}" group-title="{c["grupo"]}", {nombre}')
         lineas.append(f'#EXTVLCOPT:http-user-agent={UA}')
-        lineas.append(c['stream'])
+        lineas.append(url)
 
     return Response("\n".join(lineas), mimetype='application/x-mpegurl')
+
+@app.route('/stream/<nombre>')
+def stream_canal(nombre):
+    """
+    Devuelve la URL fresca del canal desde el JSON.
+    VLC llama esto cada vez que necesita reproducir.
+    """
+    import urllib.parse
+    from flask import redirect
+    nombre = urllib.parse.unquote(nombre).rstrip('#')
+    try:
+        canales = get_canales()
+        for c in canales:
+            if c.get('nombre','').lower() == nombre.lower():
+                if c.get('stream'):
+                    return redirect(c['stream'])
+    except Exception as e:
+        return f"Error: {e}", 502
+    return "Canal no encontrado", 404
 
 @app.route('/player')
 def player():
