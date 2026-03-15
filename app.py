@@ -5,9 +5,10 @@ from flask import Flask, Response, request
 app = Flask(__name__)
 
 # URL del canales.m3u generado por GitHub Actions (rama streams)
-GITHUB_USER = os.environ.get('GITHUB_USER', 'wallysosa')
-GITHUB_REPO = os.environ.get('GITHUB_REPO', 'mi-puente-youtube')
-M3U_URL     = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/streams/canales.m3u"
+GITHUB_USER  = os.environ.get('GITHUB_USER',  'wallysosa')
+GITHUB_REPO  = os.environ.get('GITHUB_REPO',  'mi-puente-youtube')
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')
+M3U_URL      = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/streams/canales.m3u"
 
 @app.route('/')
 def home():
@@ -24,7 +25,10 @@ def home():
 def canales_m3u():
     """Sirve el canales.m3u generado por GitHub Actions."""
     try:
-        r = requests.get(M3U_URL, timeout=15)
+        hdrs = {}
+        if GITHUB_TOKEN:
+            hdrs['Authorization'] = f'token {GITHUB_TOKEN}'
+        r = requests.get(M3U_URL, headers=hdrs, timeout=15)
         r.raise_for_status()
         return Response(r.text, mimetype='application/x-mpegurl')
     except Exception as e:
@@ -34,7 +38,10 @@ def canales_m3u():
 def lista():
     """Muestra los canales disponibles en HTML."""
     try:
-        r = requests.get(M3U_URL, timeout=15)
+        hdrs = {}
+        if GITHUB_TOKEN:
+            hdrs['Authorization'] = f'token {GITHUB_TOKEN}'
+        r = requests.get(M3U_URL, headers=hdrs, timeout=15)
         r.raise_for_status()
         lineas  = r.text.splitlines()
         canales = []
