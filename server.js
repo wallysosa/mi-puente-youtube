@@ -2,90 +2,74 @@ const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const app = express();
 
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36';
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-// ── Lista de canales DAI ─────────────────────────────────────────────────────
+// ── CONFIGURACIÓN DE URL ─────────────────────────────────────────────────────
+const BASE_URL = process.env.RENDER_EXTERNAL_URL || 'https://mi-puente-youtube.onrender.com';
+
+// ── LISTA DE CANALES ─────────────────────────────────────────────────────────
 const CANALES = [
-  { nombre: 'TN - Todo Noticias', pais: 'AR', grupo: 'Argentina', logo: 'https://graph.facebook.com/todonoticias/picture?width=200&height=200',  dai: '5OEEtA9FR-yrvhNE5K8PQQ' },
+  { nombre: 'TN - Todo Noticias', pais: 'AR', grupo: 'Argentina', logo: 'https://graph.facebook.com/todonoticias/picture?width=200&height=200', dai: '5OEEtA9FR-yrvhNE5K8PQQ' },
   { nombre: 'Azteca 7',           pais: 'MX', grupo: 'Mexico',    logo: 'https://graph.facebook.com/aztecasiete/picture?width=200&height=200',   dai: 'YHoOj51dSKCvBQOBG2OvLQ' },
-  { nombre: 'a mas',              pais: 'MX', grupo: 'Mexico',    logo: 'https://graph.facebook.com/amastv/picture?width=200&height=200',         dai: 'SJysMl45QMSwjo0TodSk1Q' },
+  { nombre: 'a mas',              pais: 'MX', grupo: 'Mexico',    logo: 'https://graph.facebook.com/amastv/picture?width=200&height=200',        dai: 'SJysMl45QMSwjo0TodSk1Q' },
   { nombre: 'DW Espanol',         pais: 'DE', grupo: 'Internacional', logo: 'https://graph.facebook.com/dw.espanol/picture?width=200&height=200', stream: 'https://dwamdstream104.akamaized.net/hls/live/2015530/dwstream104/stream04/streamPlaylist.m3u8' },
   { nombre: 'NHK World',          pais: 'JP', grupo: 'Internacional', logo: 'https://graph.facebook.com/NHKWorldTV/picture?width=200&height=200', stream: 'https://nhkwlive-ojp.akamaized.net/hls/live/2003459/nhkwlive-ojp-en/index_1M.m3u8' },
 ];
 
-const BASE_URL = process.env.MY_APP_URL || 'https://mi-puente-youtube.onrender.com';
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-function daiUrl(daiId) {
-  return `https://dai.google.com/linear/hls/event/${daiId}/master.m3u8`;
-}
-
+// ── HELPERS ──────────────────────────────────────────────────────────────────
 function streamUrl(canal) {
-  if (canal.dai) return `${BASE_URL}/dai/${canal.dai}`;
+  if (canal.dai) return `${BASE_URL}/dai/${canal.dai}.m3u8`;
   return canal.stream;
 }
 
-// ── Rutas ────────────────────────────────────────────────────────────────────
+// ── RUTAS ────────────────────────────────────────────────────────────────────
 
-// Ping para cron-job (mantener despierto)
+// Ping para cron-job
 app.get('/ping', (req, res) => res.send('OK'));
 
 // Home
 app.get('/', (req, res) => {
   res.send(`
-    <h2>📺 Canales Latinos</h2>
-    <ul>
-      <li><a href="/player">🎬 Reproductor Web</a></li>
-      <li><a href="/canales.m3u">📋 Lista M3U para VLC/OTT</a></li>
-      <li><a href="/canales.json">📄 JSON</a></li>
-      <li><a href="/ping">🏓 Ping</a></li>
-    </ul>
+    <body style="background:#0f0f0f; color:white; font-family:sans-serif; text-align:center; padding-top:50px;">
+      <h1 style="color:#e50914;">📺 Canales Latinos</h1>
+      <div style="margin-top:20px;">
+        <a href="/player" style="display:inline-block; background:#e50914; color:white; padding:12px 24px; text-decoration:none; border-radius:5px; margin:10px;">🎬 Reproductor Web</a>
+        <a href="/canales.m3u" style="display:inline-block; background:#333; color:white; padding:12px 24px; text-decoration:none; border-radius:5px; margin:10px;">📋 Descargar M3U</a>
+      </div>
+    </body>
   `);
 });
 
-// JSON con lista de canales
+// JSON de Canales
 app.get('/canales.json', (req, res) => {
-  const data = CANALES.map(c => ({
-    nombre: c.nombre,
-    pais:   c.pais,
-    grupo:  c.grupo,
-    logo:   c.logo,
-    stream: streamUrl(c)
-  }));
+  const data = CANALES.map(c => ({ ...c, stream: streamUrl(c) }));
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.json(data);
 });
 
-// M3U para VLC/OTT/TiviMate
+// Lista M3U
 app.get('/canales.m3u', (req, res) => {
   let m3u = '#EXTM3U\n';
-  for (const c of CANALES) {
+  CANALES.forEach(c => {
     const url = streamUrl(c);
-    if (!url) continue;
     m3u += `#EXTINF:-1 tvg-logo="${c.logo}" tvg-country="${c.pais}" group-title="${c.grupo}", ${c.nombre}\n`;
-    m3u += `#EXTVLCOPT:http-user-agent=${UA}\n`;
-    m3u += `${url}\n`;
-  }
+    m3u += `#EXTVLCOPT:http-user-agent=${UA}\n${url}\n`;
+  });
   res.setHeader('Content-Type', 'application/x-mpegurl');
   res.send(m3u);
 });
 
-// Proxy DAI — renueva la URL automáticamente
+// Proxy DAI
 app.use('/dai/:daiId', (req, res, next) => {
-  const daiId  = req.params.daiId.replace('#', '').replace('.m3u8', '');
-  const target = daiUrl(daiId);
-
+  const daiId = req.params.daiId.replace('.m3u8', '');
   createProxyMiddleware({
-    target:       'https://dai.google.com',
+    target: 'https://dai.google.com',
     changeOrigin: true,
-    followRedirects: true,
-    pathRewrite:  () => `/linear/hls/event/${daiId}/master.m3u8`,
+    pathRewrite: () => `/linear/hls/event/${daiId}/master.m3u8`,
     on: {
-      proxyRes: (proxyRes) => {
-        proxyRes.headers['access-control-allow-origin'] = '*';
-      },
-      error: (err, req, res) => {
-        res.status(502).send(`Error proxy DAI: ${err.message}`);
+      proxyRes: (pRes) => {
+        pRes.headers['Access-Control-Allow-Origin'] = '*';
+        delete pRes.headers['content-security-policy'];
       }
     }
   })(req, res, next);
@@ -96,100 +80,64 @@ app.get('/player', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>📺 Canales Latinos</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.10/hls.min.js"></script>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #0f0f0f; color: #fff; font-family: sans-serif; display: flex; height: 100vh; }
-  #sidebar { width: 280px; background: #1a1a1a; overflow-y: auto; border-right: 1px solid #333; }
-  #sidebar h2 { padding: 15px; background: #e50914; font-size: 16px; }
-  .canal { display: flex; align-items: center; padding: 10px 15px; cursor: pointer; border-bottom: 1px solid #2a2a2a; transition: background 0.2s; }
-  .canal:hover, .canal.activo { background: #2a2a2a; border-left: 3px solid #e50914; }
-  .canal img { width: 40px; height: 40px; object-fit: contain; margin-right: 10px; border-radius: 5px; background: #333; }
-  .canal-nombre { font-size: 13px; font-weight: bold; }
-  .canal-grupo  { font-size: 11px; color: #888; margin-top: 2px; }
-  #main { flex: 1; display: flex; flex-direction: column; }
-  video { flex: 1; width: 100%; background: #000; }
-  #info-bar { padding: 10px 20px; background: #1a1a1a; display: flex; align-items: center; gap: 15px; border-top: 1px solid #333; }
-  #canal-actual { font-size: 15px; font-weight: bold; flex: 1; }
-  a.btn { background: #e50914; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-size: 13px; text-decoration: none; }
-  a.btn:hover { background: #c0070f; }
-  #grupo-filter { padding: 10px 15px; }
-  #grupo-filter select { width: 100%; padding: 6px; background: #333; color: #fff; border: 1px solid #444; border-radius: 4px; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reproductor Canales</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.10/hls.min.js"></script>
+    <style>
+        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        #sidebar { width: 300px; background: #141414; border-right: 1px solid #333; overflow-y: auto; }
+        .canal { padding: 15px; cursor: pointer; border-bottom: 1px solid #222; display: flex; align-items: center; }
+        .canal:hover { background: #222; }
+        .canal img { width: 45px; height: 45px; margin-right: 12px; border-radius: 4px; }
+        #main { flex: 1; display: flex; flex-direction: column; }
+        video { width: 100%; height: 100%; background: #000; }
+        h2 { padding: 20px; font-size: 18px; color: #e50914; margin: 0; }
+    </style>
 </head>
 <body>
-<div id="sidebar">
-  <h2>📺 Canales Latinos</h2>
-  <div id="grupo-filter">
-    <select id="select-grupo" onchange="filtrarGrupo()">
-      <option value="">Todos los grupos</option>
-    </select>
-  </div>
-  <div id="lista"></div>
-</div>
-<div id="main">
-  <video id="video" controls autoplay></video>
-  <div id="info-bar">
-    <span id="canal-actual">← Seleccioná un canal</span>
-    <a class="btn" href="/canales.m3u" download="canales.m3u">⬇ Descargar M3U</a>
-  </div>
-</div>
-<script>
-let hls = null, canales = [];
+    <div id="sidebar">
+        <h2>Canales Disponibles</h2>
+        <div id="lista"></div>
+    </div>
+    <div id="main">
+        <video id="video" controls autoplay></video>
+    </div>
+    <script>
+        const video = document.getElementById('video');
+        let hls = null;
 
-async function init() {
-  const r = await fetch('/canales.json');
-  canales = await r.json();
-  const grupos = [...new Set(canales.map(c => c.grupo))];
-  const sel = document.getElementById('select-grupo');
-  grupos.forEach(g => { const o = document.createElement('option'); o.value = g; o.textContent = g; sel.appendChild(o); });
-  render(canales);
-}
+        async function cargar() {
+            const res = await fetch('/canales.json');
+            const canales = await res.json();
+            const lista = document.getElementById('lista');
+            canales.forEach(c => {
+                const item = document.createElement('div');
+                item.className = 'canal';
+                item.innerHTML = \`<img src="\${c.logo}"> <span>\${c.nombre}</span>\`;
+                item.onclick = () => play(c.stream);
+                lista.appendChild(item);
+            });
+        }
 
-function filtrarGrupo() {
-  const g = document.getElementById('select-grupo').value;
-  render(g ? canales.filter(c => c.grupo === g) : canales);
-}
-
-function render(lista) {
-  const div = document.getElementById('lista');
-  div.innerHTML = '';
-  lista.forEach(c => {
-    const el = document.createElement('div');
-    el.className = 'canal';
-    el.innerHTML = \`<img src="\${c.logo}" onerror="this.src=''" alt="">
-      <div><div class="canal-nombre">\${c.nombre}</div><div class="canal-grupo">\${c.grupo} · \${c.pais}</div></div>\`;
-    el.onclick = () => play(c, el);
-    div.appendChild(el);
-  });
-}
-
-function play(canal, el) {
-  document.querySelectorAll('.canal').forEach(e => e.classList.remove('activo'));
-  el.classList.add('activo');
-  document.getElementById('canal-actual').textContent = '▶ ' + canal.nombre;
-  const video = document.getElementById('video');
-  if (hls) { hls.destroy(); hls = null; }
-  if (Hls.isSupported()) {
-    hls = new Hls();
-    hls.loadSource(canal.stream);
-    hls.attachMedia(video);
-    hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
-  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    video.src = canal.stream;
-    video.play();
-  }
-}
-
-init();
-</script>
+        function play(url) {
+            if (hls) { hls.destroy(); }
+            if (Hls.isSupported()) {
+                hls = new Hls();
+                hls.loadSource(url);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = url;
+                video.play();
+            }
+        }
+        cargar();
+    </script>
 </body>
 </html>`);
 });
 
-// ── Iniciar servidor ─────────────────────────────────────────────────────────
+// Puerto
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Servidor corriendo en puerto ${PORT}`));
+app.listen(PORT, () => console.log('Servidor ONLINE en puerto ' + PORT));
