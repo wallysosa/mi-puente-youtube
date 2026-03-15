@@ -1,11 +1,11 @@
 {
-  "name": "canales-latinos",
+  "name": "canales-latinos-pro",
   "version": "1.0.0",
   "main": "server.js",
   "dependencies": {
     "express": "^4.18.2",
     "http-proxy-middleware": "^2.0.6",
-    "node-fetch": "^2.7.0"
+    "@distube/ytdl-core": "latest"
   },
   "scripts": {
     "start": "node server.js"
