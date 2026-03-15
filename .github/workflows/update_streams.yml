@@ -52,45 +52,46 @@ jobs:
           CRON=$(cat ./cronica.txt)
           A24=$(cat ./a24.txt)
           DOCE=$(cat ./eldoce.txt)
-          printf '%s\n' \
-            '#EXTM3U' \
-            '#EXTINF:-1 tvg-logo="https://graph.facebook.com/todonoticias/picture?width=200&height=200" tvg-country="AR" group-title="Argentina", TN - Todo Noticias' \
-            '#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36' \
-            "$TN" \
-            '#EXTINF:-1 tvg-logo="https://yt3.googleusercontent.com/ytc/AIdro_nQ5B7sMG1YfwFpRlM_d_8b3U5GBCiNUYhqBdV9=s176-c-k-c0x00ffffff-no-rj" tvg-country="AR" group-title="Argentina", C5N' \
-            '#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36' \
-            "$C5N" \
-            '#EXTINF:-1 tvg-logo="https://graph.facebook.com/TVPublicaArgentina/picture?width=200&height=200" tvg-country="AR" group-title="Argentina", TV Publica' \
-            '#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36' \
-            "$TVPUB" \
-            '#EXTINF:-1 tvg-logo="https://graph.facebook.com/canal26noticias/picture?width=200&height=200" tvg-country="AR" group-title="Argentina", Canal 26' \
-            '#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36' \
-            "$C26" \
-            '#EXTINF:-1 tvg-logo="https://graph.facebook.com/americaenvivo/picture?width=200&height=200" tvg-country="AR" group-title="Argentina", America TV' \
-            '#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36' \
-            "$AMER" \
-            '#EXTINF:-1 tvg-logo="https://graph.facebook.com/Radiomitre/picture?width=200&height=200" tvg-country="AR" group-title="Argentina", Radio Mitre' \
-            '#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36' \
-            "$MITRE" \
-            '#EXTINF:-1 tvg-logo="https://graph.facebook.com/cronicatv/picture?width=200&height=200" tvg-country="AR" group-title="Argentina", Cronica TV' \
-            '#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36' \
-            "$CRON" \
-            '#EXTINF:-1 tvg-logo="https://graph.facebook.com/A24com/picture?width=200&height=200" tvg-country="AR" group-title="Argentina", A24' \
-            '#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36' \
-            "$A24" \
-            '#EXTINF:-1 tvg-logo="https://graph.facebook.com/eldoce/picture?width=200&height=200" tvg-country="AR" group-title="Argentina", El Doce' \
-            '#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36' \
-            "$DOCE" \
-            '#EXTINF:-1 tvg-logo="https://graph.facebook.com/aztecasiete/picture?width=200&height=200" tvg-country="MX" group-title="Mexico", Azteca 7' \
-            '#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36' \
-            'https://dai.google.com/linear/hls/event/YHoOj51dSKCvBQOBG2OvLQ/master.m3u8' \
-            '#EXTINF:-1 tvg-logo="https://graph.facebook.com/dw.espanol/picture?width=200&height=200" tvg-country="DE" group-title="Internacional", DW Espanol' \
-            '#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36' \
-            'https://dwamdstream104.akamaized.net/hls/live/2015530/dwstream104/stream04/streamPlaylist.m3u8' \
-            '#EXTINF:-1 tvg-logo="https://graph.facebook.com/NHKWorldTV/picture?width=200&height=200" tvg-country="JP" group-title="Internacional", NHK World' \
-            '#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36' \
-            'https://nhkwlive-ojp.akamaized.net/hls/live/2003459/nhkwlive-ojp-en/index_1M.m3u8' \
-          > canales.m3u
+
+          {
+            echo "#EXTM3U"
+            echo "#EXTINF:-1 tvg-logo=\"https://graph.facebook.com/todonoticias/picture?width=200&height=200\" tvg-country=\"AR\" group-title=\"Argentina\", TN - Todo Noticias"
+            echo "#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+            echo "$TN"
+            echo "#EXTINF:-1 tvg-logo=\"https://yt3.googleusercontent.com/ytc/AIdro_nQ5B7sMG1YfwFpRlM_d_8b3U5GBCiNUYhqBdV9=s176-c-k-c0x00ffffff-no-rj\" tvg-country=\"AR\" group-title=\"Argentina\", C5N"
+            echo "#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+            echo "$C5N"
+            echo "#EXTINF:-1 tvg-logo=\"https://graph.facebook.com/TVPublicaArgentina/picture?width=200&height=200\" tvg-country=\"AR\" group-title=\"Argentina\", TV Publica"
+            echo "#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+            echo "$TVPUB"
+            echo "#EXTINF:-1 tvg-logo=\"https://graph.facebook.com/canal26noticias/picture?width=200&height=200\" tvg-country=\"AR\" group-title=\"Argentina\", Canal 26"
+            echo "#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+            echo "$C26"
+            echo "#EXTINF:-1 tvg-logo=\"https://graph.facebook.com/americaenvivo/picture?width=200&height=200\" tvg-country=\"AR\" group-title=\"Argentina\", America TV"
+            echo "#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+            echo "$AMER"
+            echo "#EXTINF:-1 tvg-logo=\"https://graph.facebook.com/Radiomitre/picture?width=200&height=200\" tvg-country=\"AR\" group-title=\"Argentina\", Radio Mitre"
+            echo "#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+            echo "$MITRE"
+            echo "#EXTINF:-1 tvg-logo=\"https://graph.facebook.com/cronicatv/picture?width=200&height=200\" tvg-country=\"AR\" group-title=\"Argentina\", Cronica TV"
+            echo "#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+            echo "$CRON"
+            echo "#EXTINF:-1 tvg-logo=\"https://graph.facebook.com/A24com/picture?width=200&height=200\" tvg-country=\"AR\" group-title=\"Argentina\", A24"
+            echo "#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+            echo "$A24"
+            echo "#EXTINF:-1 tvg-logo=\"https://graph.facebook.com/eldoce/picture?width=200&height=200\" tvg-country=\"AR\" group-title=\"Argentina\", El Doce"
+            echo "#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+            echo "$DOCE"
+            echo "#EXTINF:-1 tvg-logo=\"https://graph.facebook.com/aztecasiete/picture?width=200&height=200\" tvg-country=\"MX\" group-title=\"Mexico\", Azteca 7"
+            echo "#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+            echo "https://dai.google.com/linear/hls/event/YHoOj51dSKCvBQOBG2OvLQ/master.m3u8"
+            echo "#EXTINF:-1 tvg-logo=\"https://graph.facebook.com/dw.espanol/picture?width=200&height=200\" tvg-country=\"DE\" group-title=\"Internacional\", DW Espanol"
+            echo "#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+            echo "https://dwamdstream104.akamaized.net/hls/live/2015530/dwstream104/stream04/streamPlaylist.m3u8"
+            echo "#EXTINF:-1 tvg-logo=\"https://graph.facebook.com/NHKWorldTV/picture?width=200&height=200\" tvg-country=\"JP\" group-title=\"Internacional\", NHK World"
+            echo "#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+            echo "https://nhkwlive-ojp.akamaized.net/hls/live/2003459/nhkwlive-ojp-en/index_1M.m3u8"
+          } > canales.m3u
 
       - name: Subir a rama streams
         run: |
