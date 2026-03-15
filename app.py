@@ -1,5 +1,7 @@
 import os
 import json
+import subprocess
+import time
 import requests
 from flask import Flask, Response, request
 
@@ -11,6 +13,30 @@ GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')
 JSON_URL     = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/streams/canales.json"
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+
+# Cache yt-dlp — renueva cada 30 minutos
+_cache = {}
+_CACHE_TTL = 1800
+
+def extraer_url_yt(youtube_url):
+    ahora = time.time()
+    if youtube_url in _cache:
+        url, ts = _cache[youtube_url]
+        if ahora - ts < _CACHE_TTL:
+            return url
+    try:
+        r = subprocess.run(
+            ['yt-dlp', '-g', '--no-warnings', '-f', 'best[ext=mp4]/best', youtube_url],
+            capture_output=True, text=True, timeout=30
+        )
+        url = r.stdout.strip().split('\n')[0]
+        if url.startswith('http'):
+            _cache[youtube_url] = (url, ahora)
+            return url
+    except Exception as e:
+        print(f'[yt-dlp] Error: {e}')
+    return None
+
 
 def get_canales():
     hdrs = {}
@@ -84,19 +110,41 @@ def canales_m3u():
 
     return Response("\n".join(lineas), mimetype='application/x-mpegurl')
 
+# Fuentes YouTube para renovar en tiempo real
+YOUTUBE_SOURCES = {
+    "c5n":         "https://www.youtube.com/@c5n/live",
+    "tv publica":  "https://www.youtube.com/@TVPublicaArgentina/live",
+    "canal 26":    "https://www.youtube.com/@canal26/live",
+    "america tv":  "https://www.youtube.com/@americaenvivo/live",
+    "radio mitre": "https://www.youtube.com/@Radiomitre/live",
+    "cronica tv":  "https://www.youtube.com/@cronicatv/live",
+    "a24":         "https://www.youtube.com/@A24com/live",
+    "el doce":     "https://www.youtube.com/@eldoce/live",
+}
+
 @app.route('/stream/<nombre>')
 def stream_canal(nombre):
     """
-    Devuelve la URL fresca del canal desde el JSON.
-    VLC llama esto cada vez que necesita reproducir.
+    Para canales YouTube: extrae URL fresca con yt-dlp (cache 30 min).
+    Para otros: redirige a URL del JSON.
     """
     import urllib.parse
     from flask import redirect
-    nombre = urllib.parse.unquote(nombre).rstrip('#')
+    nombre = urllib.parse.unquote(nombre).rstrip('#').lower()
+
+    # Buscar si es canal YouTube
+    for key, yt_url in YOUTUBE_SOURCES.items():
+        if key in nombre:
+            url = extraer_url_yt(yt_url)
+            if url:
+                return redirect(url)
+            return "No se pudo extraer stream", 502
+
+    # Canal DAI o directo — leer del JSON
     try:
         canales = get_canales()
         for c in canales:
-            if c.get('nombre','').lower() == nombre.lower():
+            if c.get('nombre','').lower() == nombre:
                 if c.get('stream'):
                     return redirect(c['stream'])
     except Exception as e:
