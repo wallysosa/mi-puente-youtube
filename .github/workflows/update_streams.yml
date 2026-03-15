@@ -14,56 +14,55 @@ jobs:
           sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
           sudo chmod a+rx /usr/local/bin/yt-dlp
 
-      - name: Extraer streams
-        run: |
-          yt-dlp -g --no-warnings https://www.youtube.com/@todonoticias/live > tn.txt || echo "" > tn.txt
-          yt-dlp -g --no-warnings https://www.youtube.com/@c5n/live > c5n.txt || echo "" > c5n.txt
-          yt-dlp -g --no-warnings https://www.youtube.com/@TVPublicaArgentina/live > tvpublica.txt || echo "" > tvpublica.txt
-          yt-dlp -g --no-warnings https://www.youtube.com/@canal26/live > canal26.txt || echo "" > canal26.txt
-          yt-dlp -g --no-warnings https://www.youtube.com/@americaenvivo/live > america.txt || echo "" > america.txt
-          yt-dlp -g --no-warnings https://www.youtube.com/@Radiomitre/live > radiomitre.txt || echo "" > radiomitre.txt
-          yt-dlp -g --no-warnings https://www.youtube.com/@cronicatv/live > cronica.txt || echo "" > cronica.txt
-          yt-dlp -g --no-warnings https://www.youtube.com/@A24com/live > a24.txt || echo "" > a24.txt
-          yt-dlp -g --no-warnings https://www.youtube.com/@eldoce/live > eldoce.txt || echo "" > eldoce.txt
-
-      - name: Generar canales.m3u
+      - name: Generar canales.json
         run: |
           python3 - << 'PYEOF'
-          ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+          import subprocess, json
 
-          def stream(archivo):
+          def get_url(yt_url):
               try:
-                  return open(archivo).read().strip().split('\n')[0]
+                  r = subprocess.run(
+                      ['yt-dlp', '-g', '--no-warnings', yt_url],
+                      capture_output=True, text=True, timeout=30
+                  )
+                  url = r.stdout.strip().split('\n')[0]
+                  return url if url.startswith('http') else ''
               except:
-                  return ""
+                  return ''
 
-          canales = [
-              ("AR", "Argentina", "TN - Todo Noticias", "https://graph.facebook.com/todonoticias/picture?width=200&height=200", stream("tn.txt")),
-              ("AR", "Argentina", "C5N", "https://yt3.googleusercontent.com/ytc/AIdro_nQ5B7sMG1YfwFpRlM_d_8b3U5GBCiNUYhqBdV9=s176-c-k-c0x00ffffff-no-rj", stream("c5n.txt")),
-              ("AR", "Argentina", "TV Publica", "https://graph.facebook.com/TVPublicaArgentina/picture?width=200&height=200", stream("tvpublica.txt")),
-              ("AR", "Argentina", "Canal 26", "https://graph.facebook.com/canal26noticias/picture?width=200&height=200", stream("canal26.txt")),
-              ("AR", "Argentina", "America TV", "https://graph.facebook.com/americaenvivo/picture?width=200&height=200", stream("america.txt")),
-              ("AR", "Argentina", "Radio Mitre", "https://graph.facebook.com/Radiomitre/picture?width=200&height=200", stream("radiomitre.txt")),
-              ("AR", "Argentina", "Cronica TV", "https://graph.facebook.com/cronicatv/picture?width=200&height=200", stream("cronica.txt")),
-              ("AR", "Argentina", "A24", "https://graph.facebook.com/A24com/picture?width=200&height=200", stream("a24.txt")),
-              ("AR", "Argentina", "El Doce", "https://graph.facebook.com/eldoce/picture?width=200&height=200", stream("eldoce.txt")),
-              ("MX", "Mexico",    "Azteca 7", "https://graph.facebook.com/aztecasiete/picture?width=200&height=200", "https://dai.google.com/linear/hls/event/YHoOj51dSKCvBQOBG2OvLQ/master.m3u8"),
-              ("DE", "Internacional", "DW Espanol", "https://graph.facebook.com/dw.espanol/picture?width=200&height=200", "https://dwamdstream104.akamaized.net/hls/live/2015530/dwstream104/stream04/streamPlaylist.m3u8"),
-              ("JP", "Internacional", "NHK World", "https://graph.facebook.com/NHKWorldTV/picture?width=200&height=200", "https://nhkwlive-ojp.akamaized.net/hls/live/2003459/nhkwlive-ojp-en/index_1M.m3u8"),
+          fuentes = [
+              {"nombre": "TN - Todo Noticias", "pais": "AR", "grupo": "Argentina", "logo": "https://graph.facebook.com/todonoticias/picture?width=200&height=200", "stream": "https://dai.google.com/linear/hls/event/5OEEtA9FR-yrvhNE5K8PQQ/master.m3u8"},
+              {"nombre": "C5N",                "pais": "AR", "grupo": "Argentina", "logo": "https://yt3.googleusercontent.com/ytc/AIdro_nQ5B7sMG1YfwFpRlM_d_8b3U5GBCiNUYhqBdV9=s176-c-k-c0x00ffffff-no-rj", "youtube_live": "https://www.youtube.com/@c5n/live"},
+              {"nombre": "TV Publica",          "pais": "AR", "grupo": "Argentina", "logo": "https://graph.facebook.com/TVPublicaArgentina/picture?width=200&height=200", "youtube_live": "https://www.youtube.com/@TVPublicaArgentina/live"},
+              {"nombre": "Canal 26",            "pais": "AR", "grupo": "Argentina", "logo": "https://graph.facebook.com/canal26noticias/picture?width=200&height=200", "youtube_live": "https://www.youtube.com/@canal26/live"},
+              {"nombre": "America TV",          "pais": "AR", "grupo": "Argentina", "logo": "https://graph.facebook.com/americaenvivo/picture?width=200&height=200", "youtube_live": "https://www.youtube.com/@americaenvivo/live"},
+              {"nombre": "Radio Mitre",         "pais": "AR", "grupo": "Argentina", "logo": "https://graph.facebook.com/Radiomitre/picture?width=200&height=200", "youtube_live": "https://www.youtube.com/@Radiomitre/live"},
+              {"nombre": "Azteca 7",            "pais": "MX", "grupo": "Mexico",    "logo": "https://graph.facebook.com/aztecasiete/picture?width=200&height=200", "stream": "https://dai.google.com/linear/hls/event/YHoOj51dSKCvBQOBG2OvLQ/master.m3u8"},
+              {"nombre": "a mas",               "pais": "MX", "grupo": "Mexico",    "logo": "https://graph.facebook.com/amastv/picture?width=200&height=200", "stream": "https://dai.google.com/linear/hls/event/SJysMl45QMSwjo0TodSk1Q/master.m3u8"},
+              {"nombre": "DW Espanol",          "pais": "DE", "grupo": "Internacional", "logo": "https://graph.facebook.com/dw.espanol/picture?width=200&height=200", "stream": "https://dwamdstream104.akamaized.net/hls/live/2015530/dwstream104/stream04/streamPlaylist.m3u8"},
+              {"nombre": "NHK World",           "pais": "JP", "grupo": "Internacional", "logo": "https://graph.facebook.com/NHKWorldTV/picture?width=200&height=200", "stream": "https://nhkwlive-ojp.akamaized.net/hls/live/2003459/nhkwlive-ojp-en/index_1M.m3u8"},
           ]
 
-          lines = ["#EXTM3U"]
-          for pais, grupo, nombre, logo, url in canales:
-              if not url:
-                  continue
-              lines.append(f'#EXTINF:-1 tvg-logo="{logo}" tvg-country="{pais}" group-title="{grupo}", {nombre}')
-              lines.append(f'#EXTVLCOPT:http-user-agent={ua}')
-              lines.append(url)
+          resultado = []
+          for c in fuentes:
+              if 'youtube_live' in c:
+                  print(f"Extrayendo {c['nombre']}...")
+                  url = get_url(c['youtube_live'])
+                  print(f"  -> {'OK' if url else 'FALLO'}")
+              else:
+                  url = c['stream']
+              resultado.append({
+                  "nombre": c['nombre'],
+                  "pais":   c['pais'],
+                  "grupo":  c['grupo'],
+                  "logo":   c['logo'],
+                  "stream": url
+              })
 
-          with open("canales.m3u", "w") as f:
-              f.write("\n".join(lines))
+          with open('canales.json', 'w') as f:
+              json.dump(resultado, f, ensure_ascii=False, indent=2)
 
-          print(f"Generado con {len(canales)} canales")
+          print(f"JSON generado con {len(resultado)} canales")
           PYEOF
 
       - name: Subir a rama streams
@@ -72,7 +71,7 @@ jobs:
           git config --local user.name "actions"
           git config --local user.email "action@github.com"
           git checkout -b streams
-          git add canales.m3u
+          git add canales.json
           git commit -m "Actualizar streams $(date -u '+%Y-%m-%d %H:%M UTC')"
           git remote add origin "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
           git push -f -u origin streams
