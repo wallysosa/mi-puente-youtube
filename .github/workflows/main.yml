@@ -1,0 +1,25 @@
+name: AutoUpdateVOD
+on:
+  schedule:
+    - cron: "0 */6 * * *" # Se actualiza cada 6 horas
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install deps
+        run: pip install requests
+      - name: Run Scraper
+        run: python scraper_vod.py --todo
+      - name: Push results
+        run: |
+          git config --local user.name "github-actions"
+          git config --local user.email "action@github.com"
+          git add vod.json
+          git commit -m "Update VOD" || exit 0
+          git push
