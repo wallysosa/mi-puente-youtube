@@ -1,25 +1,35 @@
-name: AutoUpdateVOD
+name: Actualizar Lista IPTV Automática
+
 on:
   schedule:
-    - cron: "0 */6 * * *" # Se actualiza cada 6 horas
-  workflow_dispatch:
+    - cron: '0 */2 * * *' # Se ejecuta de forma automática cada 2 horas
+  workflow_dispatch: # Activa un botón en GitHub para ejecutarlo manualmente cuando quieras
+
 jobs:
-  build:
+  refresh-list:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      - name: Install deps
-        run: pip install requests
-      - name: Run Scraper
-        run: python scraper_vod.py --todo
-      - name: Push results
-        run: |
-          git config --local user.name "github-actions"
-          git config --local user.email "action@github.com"
-          git add vod.json
-          git commit -m "Update VOD" || exit 0
-          git push
+    - name: 1. Clonar el repositorio
+      uses: actions/checkout@v4
+
+    - name: 2. Configurar entorno Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: 3. Instalar dependencias necesarias
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: 4. Ejecutar el script generador de canales
+      run: python generate.py
+
+    - name: 5. Autenticar y subir la nueva lista al repositorio
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add lista.m3u
+        # Solo sube cambios si el archivo lista.m3u realmente cambió su contenido
+        git diff --quiet && git diff --staged --quiet || (git commit -m "🔄 Lista IPTV auto-actualizada" && git push)
