@@ -24,7 +24,7 @@ jobs:
         pip install -r requirements.txt
 
     - name: 4. Ejecutar el script generador de canales
-      run: python generate.py
+      run: python subrayado2.py
 
     - name: 5. Autenticar y subir la nueva lista al repositorio
       run: |
