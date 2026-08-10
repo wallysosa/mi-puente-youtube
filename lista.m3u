@@ -1,5 +1,1 @@
 #EXTM3U
-#EXTINF:-1 tvg-logo="https://www.subrayado.com.uy/favicon.ico" group-title="URUGUAY", Subrayado HD (RAW)
-#EXTVLCOPT:http-referrer=https://www.subrayado.com.uy/
-#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
-https://cdnw1.zetatv.com.uy/live_edge/_definst_/amlst:2265/playlist.m3u8?token=9039fb0c-2a0d-46dd-a338-9cd889fc3a85
